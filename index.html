@@ -22,12 +22,12 @@
 @media(max-width:760px){.top{padding:0 16px}.nav{gap:10px}.nav button{font-size:11px}.wrap{padding:0 16px}.hero{grid-template-columns:1fr;padding:48px 0 35px}.hero-note{display:none}.posts{grid-template-columns:1fr}.toolbar{flex-wrap:wrap}.search{max-width:none;flex-basis:100%}.panel{padding:20px}.brand{font-size:18px}}
 </style></head>
 <body>
-<header class="top"><div class="brand">MATHESIS<small>MATHEMATICS, SHARED.</small></div><nav class="nav"><button onclick="showHome()">Explore</button><button onclick="myPosts()">My works</button><button class="primary" id="authBtn" onclick="signIn()">Googleでログイン</button></nav></header>
+<header class="top"><div class="brand">MATHEDIT<small>MATHEMATICS, SHARED.</small></div><nav class="nav"><button onclick="showHome()">Explore</button><button onclick="myPosts()">My works</button><button class="primary" id="authBtn" onclick="signIn()">Googleでログイン</button></nav></header>
 <main class="wrap" id="home">
 <section class="hero"><div><div class="eyebrow">A SPACE FOR MATHEMATICAL THOUGHT</div><h1>Ideas become<br>mathematics.</h1><p>数式、問題、図形、そして解法。数学について考えたことを記録し、共有し、対話するための場所。</p></div><div class="hero-note">01 / CREATE<br>02 / PUBLISH<br>03 / DISCUSS<br><br>Knowledge grows<br>through dialogue.</div></section>
 <div class="toolbar"><input class="search" id="search" placeholder="タイトル・内容・投稿者を検索..." oninput="renderPosts()"><select id="category" class="search" style="max-width:190px" onchange="renderPosts()"><option value="">すべての分野</option><option>算数・数学</option><option>代数学</option><option>幾何学</option><option>解析学</option><option>確率・統計</option><option>物理・応用数学</option><option>その他</option></select><button class="primary" onclick="newPost()">＋ 新しい投稿</button></div>
 <div class="section-head"><h2 id="listTitle">Recently published</h2><span class="count" id="postCount">0 ENTRIES</span></div><section class="posts" id="posts"><div class="empty">Firebaseを接続すると、公開された投稿がここに表示されます。</div></section>
-<footer class="footer"><span>MATHESIS / DIGITAL MATHEMATICS ARCHIVE</span><span>THINK · WRITE · SHARE</span></footer></main>
+<footer class="footer"><span>MATHEDIT / DIGITAL MATHEMATICS ARCHIVE</span><span>THINK · WRITE · SHARE</span></footer></main>
 
 <div class="modal" id="editorModal"><div class="panel"><div class="panel-head"><h2 id="editorTitle">Create a work</h2><button class="close" onclick="closeModal('editorModal')">×</button></div>
 <div class="field"><label>TITLE / タイトル</label><input id="postTitle" placeholder="例：二次関数の最大値と最小値"></div>
