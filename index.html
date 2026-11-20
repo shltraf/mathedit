@@ -35,14 +35,15 @@
 <div class="modal" id="detailModal"><div class="panel"><div class="panel-head"><h2>Work / Discussion</h2><button class="close" onclick="closeModal('detailModal')">×</button></div><div id="detailBody"></div></div></div>
 <div class="modal" id="profileModal"><div class="panel narrow"><div class="panel-head"><h2>My account</h2><button class="close" onclick="closeModal('profileModal')">×</button></div><div id="profileBody"></div></div></div>
 <script type="module">
-  // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+  import {
+    getFirestore, collection, getDocs, query, where, doc, getDoc,
+    updateDoc, serverTimestamp, addDoc, deleteDoc
+  } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
   const firebaseConfig = {
     apiKey: "AIzaSyA-798uhbProbEBmeXhBTMlC_9t96uv5uE",
     authDomain: "mathedit-sh.firebaseapp.com",
@@ -53,12 +54,20 @@
     measurementId: "G-72LG8CLSD1"
   };
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
 let db=null,auth=null,user=null,posts=[],editingId=null,activePost=null,blockData=[];
-const configured=!Object.values(firebaseConfig).some(v=>v.includes("YOUR_"));
-if(configured){const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);onAuthStateChanged(auth,u=>{user=u;updateAuth();loadPosts()})}else{updateAuth();renderPosts()}
+const configured=!Object.values(firebaseConfig).some(v=>String(v).includes("YOUR_"));
+if(configured){
+  try {
+    const app=initializeApp(firebaseConfig);
+    auth=getAuth(app);
+    db=getFirestore(app);
+    onAuthStateChanged(auth,u=>{user=u;updateAuth();loadPosts()});
+  } catch(e) {
+    console.error("Firebase initialization failed:",e);
+    alert("Firebaseの初期化に失敗しました。Consoleを確認してください: "+e.message);
+    updateAuth();renderPosts();
+  }
+}else{updateAuth();renderPosts()}
 window.signIn=async()=>{if(!auth){alert("READMEのFirebase設定を先に行ってください。");return}try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){alert("ログインできませんでした: "+e.message)}};
 window.signOutNow=async()=>{if(auth)await signOut(auth)};
 window.updateAuth=()=>{const b=document.getElementById("authBtn");if(b)b.textContent=user?(user.displayName||"Account")+" ▾":"Googleでログイン";if(b)b.onclick=()=>user?openProfile():signIn()};
@@ -71,7 +80,7 @@ window.myPosts=async()=>{if(!user){alert("マイページを見るにはログ�
 window.newPost=()=>{if(!user){alert("投稿するにはGoogleログインが必要です。");return}editingId=null;blockData=[];document.getElementById("editorTitle").textContent="Create a work";document.getElementById("postTitle").value="";document.getElementById("postCategory").value="算数・数学";document.getElementById("postSummary").value="";drawBlocks();openModal("editorModal")};
 window.editPost=async id=>{const p=posts.find(x=>x.id===id)||activePost;if(!user||p.authorId!==user.uid)return alert("編集できるのは作成者本人だけです。");editingId=id;blockData=structuredClone(p.blocks||[]);document.getElementById("editorTitle").textContent="Edit a work";document.getElementById("postTitle").value=p.title||"";document.getElementById("postCategory").value=p.category||"その他";document.getElementById("postSummary").value=p.summary||"";drawBlocks();closeModal("detailModal");openModal("editorModal")};
 window.addBlock=type=>{blockData.push({type,content:""});drawBlocks()};
-function drawBlocks(){const host=document.getElementById("blocks");host.innerHTML=blockData.map((b,i)=>{let inner="";if(b.type==="math")inner=`<math-field virtual-keyboard-mode="manual" data-i="${i}">${esc(b.content)}</math-field>`;else if(b.type==="geometry")inner=`<div class="small">図形エディタ：点をクリックして配置できます</div><canvas class="geom" data-canvas="${i}" width="760" height="190"></canvas><div class="small">図形をクリックして点を追加。保存時に図形データを保持します。</div>`;else if(b.type==="graph")inner=`<input data-i="${i}" value="${esc(b.content||"x^2")}" placeholder="関数を入力（例: x^2, sin(x), 2*x+1）"><div class="small">対応演算：+ − * / ^、sin、cos、tan、sqrt、log</div><canvas class="geom graph-canvas" data-canvas="${i}" width="760" height="190"></canvas>`;else inner=`<textarea data-i="${i}" placeholder="${b.type==="problem"?"問題文を入力":b.type==="answer"?"解答・解説を入力":"文章を入力"}">${esc(b.content)}</textarea>`;return `<div class="block"><div class="block-top"><span>${b.type.toUpperCase()}</span><button class="remove" onclick="removeBlock(${i})">削除 ×</button></div>${inner}</div>`}).join("");host.querySelectorAll("[data-i]").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>{blockData[i].content=el.value})});host.querySelectorAll("math-field").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>blockData[i].content=el.value)});host.querySelectorAll("canvas[data-canvas]").forEach(c=>{const i=+c.dataset.canvas;if(blockData[i].type==="geometry")drawGeometry(c,blockData[i]);else{c.previousElementSibling?.addEventListener("input",()=>{blockData[i].content=c.previousElementSibling.value;drawGraph(c,blockData[i].content)});drawGraph(c,blockData[i].content||"x^2")}if(blockData[i].type==="geometry")c.addEventListener("click",e=>{const r=c.getBoundingClientRect();blockData[i].points=blockData[i].points||[];blockData[i].points.push({x:(e.clientX-r.left)/r.width*760,y:(e.clientY-r.top)/r.height*190});drawGeometry(c,blockData[i])})})}
+function drawBlocks(){const host=document.getElementById("blocks");host.innerHTML=blockData.map((b,i)=>{let inner="";if(b.type==="math")inner=`<math-field virtual-keyboard-mode="manual" data-i="${i}">${esc(b.content)}</math-field>`;else if(b.type==="geometry")inner=`<div class="small">図形エディタ：点をクリックして配置できます</div><canvas class="geom" data-canvas="${i}" width="760" height="190"></canvas><div class="small">図形をクリックして点を追加。保存時に図形データを保持します。</div>`;else if(b.type==="graph")inner=`<input data-i="${i}" value="${esc(b.content||"x^2")}" placeholder="関数を入力（例: x^2, sin(x), 2*x+1）"><div class="small">対応演算：+ − * / ^、sin、cos、tan、sqrt、log</div><canvas class="geom graph-canvas" data-canvas="${i}" width="760" height="190"></canvas>`;else inner=`<textarea data-i="${i}" placeholder="${b.type==="problem"?"問題文を入力":b.type==="answer"?"解答・解説を入力":"文章を入力"}">${esc(b.content)}</textarea>`;return `<div class="block"><div class="block-top"><span>${b.type.toUpperCase()}</span><button class="remove" onclick="removeBlock(${i})">削除 ×</button></div>${inner}</div>`}).join("");host.querySelectorAll("[data-i]").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>{blockData[i].content=el.value})});host.querySelectorAll("math-field").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>blockData[i].content=el.value)});host.querySelectorAll("canvas[data-canvas]").forEach(c=>{const i=+c.dataset.canvas;if(blockData[i].type==="geometry")drawGeometry(c,blockData[i]);else{const graphInput=host.querySelector(`input[data-i="${i}"]`);graphInput?.addEventListener("input",()=>{blockData[i].content=graphInput.value;drawGraph(c,blockData[i].content)});drawGraph(c,blockData[i].content||"x^2")}if(blockData[i].type==="geometry")c.addEventListener("click",e=>{const r=c.getBoundingClientRect();blockData[i].points=blockData[i].points||[];blockData[i].points.push({x:(e.clientX-r.left)/r.width*760,y:(e.clientY-r.top)/r.height*190});drawGeometry(c,blockData[i])})})}
 window.removeBlock=i=>{blockData.splice(i,1);drawBlocks()};
 function drawGeometry(c,b){const x=c.getContext("2d");x.clearRect(0,0,760,190);x.strokeStyle="#dce2dc";x.lineWidth=1;for(let a=0;a<760;a+=25){x.beginPath();x.moveTo(a,0);x.lineTo(a,190);x.stroke()}for(let a=0;a<190;a+=25){x.beginPath();x.moveTo(0,a);x.lineTo(760,a);x.stroke()}(b.points||[]).forEach((p,i)=>{x.fillStyle="#315b50";x.beginPath();x.arc(p.x,p.y,5,0,Math.PI*2);x.fill();x.fillText(String.fromCharCode(65+i),p.x+8,p.y-8)});if((b.points||[]).length>1){x.strokeStyle="#315b50";x.beginPath();x.moveTo(b.points[0].x,b.points[0].y);b.points.slice(1).forEach(p=>x.lineTo(p.x,p.y));x.stroke()}}
 function drawGraph(c,expr){const x=c.getContext("2d"),w=760,h=190;x.clearRect(0,0,w,h);x.strokeStyle="#dce2dc";x.beginPath();x.moveTo(0,h/2);x.lineTo(w,h/2);x.moveTo(w/2,0);x.lineTo(w/2,h);x.stroke();const fn=expr=>{let s=expr.replace(/\^/g,"**").replace(/\bsin\b/g,"Math.sin").replace(/\bcos\b/g,"Math.cos").replace(/\btan\b/g,"Math.tan").replace(/\bsqrt\b/g,"Math.sqrt").replace(/\blog\b/g,"Math.log");return new Function("x","return "+s)};try{const f=fn(expr||"x^2");x.strokeStyle="#315b50";x.lineWidth=2;x.beginPath();for(let px=0;px<w;px++){let xx=(px-w/2)/35,y=f(xx),py=h/2-y*16;if(!Number.isFinite(py)||Math.abs(py)>1000){x.moveTo(px,py);continue}if(px===0)x.moveTo(px,py);else x.lineTo(px,py)}x.stroke()}catch(e){x.fillStyle="#a36d62";x.fillText("関数を確認してください",12,22)}}
