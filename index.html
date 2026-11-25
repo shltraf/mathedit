@@ -27,7 +27,7 @@ window.MathJax = {
 @media(max-width:760px){.top{padding:0 16px}.nav{gap:10px}.nav button{font-size:11px}.wrap{padding:0 16px}.hero{grid-template-columns:1fr;padding:48px 0 35px}.hero-note{display:none}.posts{grid-template-columns:1fr}.toolbar{flex-wrap:wrap}.search{max-width:none;flex-basis:100%}.panel{padding:20px}.brand{font-size:18px}}
 </style></head>
 <body>
-<header class="top"><div class="brand">Mathedit<small>MATHEMATICS, SHARED.</small></div><nav class="nav"><button onclick="showHome()">Explore</button><button onclick="myPosts()">My works</button><button class="primary" id="authBtn" onclick="signIn()">Googleでログイン</button></nav></header>
+<header class="top"><div class="brand">Mathedit<small>MATHEMATICS, SHARED.</small></div><nav class="nav"><button onclick="showHome()">Explore</button><button onclick="myPosts()">My works</button><button id="adminNav" class="plain hidden" onclick="openAdmin()">管理者</button><button class="primary" id="authBtn" onclick="signIn()">Googleでログイン</button></nav></header>
 <main class="wrap" id="home">
 <section class="hero"><div><div class="eyebrow">A SPACE FOR MATHEMATICAL THOUGHT</div><h1>Ideas become<br>mathematics.</h1><p>数式、問題、図形、そして解法。数学について考えたことを記録し、共有し、対話するための場所。</p></div><div class="hero-note">01 / CREATE<br>02 / PUBLISH<br>03 / DISCUSS<br><br>Knowledge grows<br>through dialogue.</div></section>
 <div class="toolbar"><input class="search" id="search" placeholder="タイトル・内容・投稿者を検索..." oninput="renderPosts()"><select id="category" class="search" style="max-width:190px" onchange="renderPosts()"><option value="">すべての分野</option><option>算数・数学</option><option>代数学</option><option>幾何学</option><option>解析学</option><option>確率・統計</option><option>物理・応用数学</option><option>その他</option></select><button class="primary" onclick="newPost()">＋ 新しい投稿</button></div>
@@ -46,6 +46,8 @@ window.MathJax = {
 </div></div>
 <div class="modal" id="detailModal"><div class="panel"><div class="panel-head"><h2>Work / Discussion</h2><button class="close" onclick="closeModal('detailModal')">×</button></div><div id="detailBody"></div></div></div>
 <div class="modal" id="profileModal"><div class="panel narrow"><div class="panel-head"><h2>My account</h2><button class="close" onclick="closeModal('profileModal')">×</button></div><div id="profileBody"></div></div></div>
+<div class="modal" id="adminModal"><div class="panel"><div class="panel-head"><h2>Administration / 管理者ページ</h2><button class="close" onclick="closeModal('adminModal')">×</button></div><div id="adminBody">読み込み中...</div></div></div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
   import {
@@ -53,9 +55,8 @@ window.MathJax = {
   } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
   import {
     getFirestore, collection, getDocs, query, where, doc, getDoc,
-    updateDoc, serverTimestamp, addDoc, deleteDoc
+    updateDoc, serverTimestamp, addDoc, deleteDoc, setDoc
   } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-  import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-storage.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyA-798uhbProbEBmeXhBTMlC_9t96uv5uE",
@@ -67,15 +68,29 @@ window.MathJax = {
     measurementId: "G-72LG8CLSD1"
   };
 
-let db=null,auth=null,storage=null,user=null,posts=[],editingId=null,activePost=null,blockData=[];
+let db=null,auth=null,user=null,admin=false,posts=[],editingId=null,activePost=null,blockData=[];
+const BOOTSTRAP_ADMIN_EMAIL="kawaiamane2013@gmail.com";
+const knownUsers=new Map();
 const configured=!Object.values(firebaseConfig).some(v=>String(v).includes("YOUR_"));
 if(configured){
   try {
     const app=initializeApp(firebaseConfig);
     auth=getAuth(app);
     db=getFirestore(app);
-    storage=getStorage(app);
-    onAuthStateChanged(auth,u=>{user=u;updateAuth();loadPosts()});
+    onAuthStateChanged(auth,async u=>{
+      user=u; admin=false;
+      if(u){
+        try{
+          if((u.email||"").toLowerCase()===BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) admin=true;
+          else { const a=await getDoc(doc(db,"admins",u.uid)); admin=a.exists(); }
+          await setDoc(doc(db,"users",u.uid),{
+            uid:u.uid,email:u.email||"",displayName:u.displayName||"",
+            photoURL:u.photoURL||"",updatedAt:serverTimestamp()
+          },{merge:true});
+        }catch(e){console.error("User/admin initialization failed:",e)}
+      }
+      updateAuth();loadPosts();
+    });
   } catch(e) {
     console.error("Firebase initialization failed:",e);
     alert("Firebaseの初期化に失敗しました。Consoleを確認してください: "+e.message);
@@ -84,7 +99,7 @@ if(configured){
 }else{updateAuth();renderPosts()}
 window.signIn=async()=>{if(!auth){alert("READMEのFirebase設定を先に行ってください。");return}try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){alert("ログインできませんでした: "+e.message)}};
 window.signOutNow=async()=>{if(auth)await signOut(auth)};
-window.updateAuth=()=>{const b=document.getElementById("authBtn");if(b)b.textContent=user?(user.displayName||"Account")+" ▾":"Googleでログイン";if(b)b.onclick=()=>user?openProfile():signIn()};
+window.updateAuth=()=>{const b=document.getElementById("authBtn");if(b)b.textContent=user?(user.displayName||"Account")+" ▾":"Googleでログイン";if(b)b.onclick=()=>user?openProfile():signIn();const a=document.getElementById("adminNav");if(a)a.classList.toggle("hidden",!admin)};
 function updateAuth(){window.updateAuth()}
 window.openProfile=()=>{document.getElementById("profileBody").innerHTML=`<p><b>${esc(user.displayName||"")}</b></p><p class="small">${esc(user.email||"")}</p><button class="secondary" onclick="signOutNow()">ログアウト</button>`;openModal("profileModal")};
 async function loadPosts(){if(!db)return;try{const snap=await getDocs(query(collection(db,"posts"),where("published","==",true)));posts=snap.docs.map(d=>({id:d.id,...d.data()}));renderPosts()}catch(e){console.error(e);document.getElementById("posts").innerHTML='<div class="empty">投稿を読み込めません。Firestoreの設定・ルールを確認してください。</div>'}}
@@ -94,12 +109,16 @@ window.myPosts=async()=>{if(!user){alert("マイページを見るにはログ�
 window.newPost=()=>{if(!user){alert("投稿するにはGoogleログインが必要です。");return}editingId=null;blockData=[];document.getElementById("editorTitle").textContent="Create a work";document.getElementById("postTitle").value="";document.getElementById("postCategory").value="算数・数学";document.getElementById("postSummary").value="";drawBlocks();openModal("editorModal")};
 window.editPost=async id=>{const p=posts.find(x=>x.id===id)||activePost;if(!user||p.authorId!==user.uid)return alert("編集できるのは作成者本人だけです。");editingId=id;blockData=structuredClone(p.blocks||[]);document.getElementById("editorTitle").textContent="Edit a work";document.getElementById("postTitle").value=p.title||"";document.getElementById("postCategory").value=p.category||"その他";document.getElementById("postSummary").value=p.summary||"";drawBlocks();closeModal("detailModal");openModal("editorModal")};
 window.addBlock=type=>{blockData.push({type,content:"",uploading:false});drawBlocks()};
-window.handlePdfSelect=async(i,input)=>{const file=input.files?.[0];if(!file)return;const b=blockData[i];if(file.type!=="application/pdf"&&!file.name.toLowerCase().endsWith(".pdf")){alert("PDFファイルを選択してください。");input.value="";return}if(file.size>25*1024*1024){alert("PDFは25MB以下にしてください。");input.value="";return}if(!storage||!user){alert("Firebase Storageに接続できません。Storageの設定を確認してください。");input.value="";return}b.uploading=true;b.fileName=file.name;drawBlocks();try{const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`posts/${user.uid}/${Date.now()}_${safe}`;const target=storageRef(storage,path);await uploadBytes(target,file,{contentType:"application/pdf"});b.fileUrl=await getDownloadURL(target);b.storagePath=path;b.fileName=file.name;b.fileSize=file.size;b.uploading=false;drawBlocks()}catch(e){b.uploading=false;console.error(e);drawBlocks();alert("PDFのアップロードに失敗しました: "+e.message)}};
-function drawBlocks(){const host=document.getElementById("blocks");host.innerHTML=blockData.map((b,i)=>{let inner="";if(b.type==="math")inner=`<math-field virtual-keyboard-mode="manual" data-i="${i}">${esc(b.content)}</math-field>`;else if(b.type==="pdf")inner=`<div class="file-drop"><div>PDFファイルを選択して記事に埋め込めます（25MBまで）</div><input type="file" accept="application/pdf,.pdf" onchange="handlePdfSelect(${i},this)" style="margin-top:12px"><div class="file-name">${b.uploading?"アップロード中...":b.fileName?esc(b.fileName)+(b.fileUrl?" · アップロード済み":" · 未アップロード"):"PDF未選択"}</div>${b.fileUrl?`<a href="${esc(b.fileUrl)}" target="_blank" rel="noopener">PDFを別タブで確認</a>`:""}</div>`;else if(b.type==="geometry")inner=`<div class="small">図形エディタ：点をクリックして配置できます</div><canvas class="geom" data-canvas="${i}" width="760" height="190"></canvas><div class="small">図形をクリックして点を追加。保存時に図形データを保持します。</div>`;else if(b.type==="graph")inner=`<input data-i="${i}" value="${esc(b.content||"x^2")}" placeholder="関数を入力（例: x^2, sin(x), 2*x+1）"><div class="small">対応演算：+ − * / ^、sin、cos、tan、sqrt、log</div><canvas class="geom graph-canvas" data-canvas="${i}" width="760" height="190"></canvas>`;else inner=`<textarea data-i="${i}" placeholder="${b.type==="problem"?"問題文を入力":b.type==="answer"?"解答・解説を入力":"文章を入力"}">${esc(b.content)}</textarea>`;return `<div class="block"><div class="block-top"><span>${b.type.toUpperCase()}</span><button class="remove" onclick="removeBlock(${i})">削除 ×</button></div>${inner}</div>`}).join("");host.querySelectorAll("[data-i]").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>{blockData[i].content=el.value})});host.querySelectorAll("math-field").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>blockData[i].content=el.value)});host.querySelectorAll("canvas[data-canvas]").forEach(c=>{const i=+c.dataset.canvas;if(blockData[i].type==="geometry")drawGeometry(c,blockData[i]);else{const graphInput=host.querySelector(`input[data-i="${i}"]`);graphInput?.addEventListener("input",()=>{blockData[i].content=graphInput.value;drawGraph(c,blockData[i].content)});drawGraph(c,blockData[i].content||"x^2")}if(blockData[i].type==="geometry")c.addEventListener("click",e=>{const r=c.getBoundingClientRect();blockData[i].points=blockData[i].points||[];blockData[i].points.push({x:(e.clientX-r.left)/r.width*760,y:(e.clientY-r.top)/r.height*190});drawGeometry(c,blockData[i])})})}
+window.handlePdfUrl=(i,input)=>{
+  const url=input.value.trim();
+  blockData[i].fileUrl=url;
+  blockData[i].fileName=url?decodeURIComponent(url.split("/").pop().split("?")[0]||"PDF資料"):"";
+};
+function drawBlocks(){const host=document.getElementById("blocks");host.innerHTML=blockData.map((b,i)=>{let inner="";if(b.type==="math")inner=`<math-field virtual-keyboard-mode="manual" data-i="${i}">${esc(b.content)}</math-field>`;else if(b.type==="pdf")inner=`<div class="file-drop"><div>GitHub Pagesなどで公開したPDFのURLを入力してください</div><input type="url" placeholder="https://example.github.io/repo/pdfs/sample.pdf" value="${esc(b.fileUrl||"")}" oninput="handlePdfUrl(${i},this)" style="width:100%;margin-top:12px;padding:10px;border:1px solid var(--line)"><div class="file-name">${b.fileUrl?"PDF URL設定済み":"PDF URL未設定"}</div>${b.fileUrl?`<a href="${esc(b.fileUrl)}" target="_blank" rel="noopener">PDFを別タブで確認</a>`:""}</div>`;else if(b.type==="geometry")inner=`<div class="small">図形エディタ：点をクリックして配置できます</div><canvas class="geom" data-canvas="${i}" width="760" height="190"></canvas><div class="small">図形をクリックして点を追加。保存時に図形データを保持します。</div>`;else if(b.type==="graph")inner=`<input data-i="${i}" value="${esc(b.content||"x^2")}" placeholder="関数を入力（例: x^2, sin(x), 2*x+1）"><div class="small">対応演算：+ − * / ^、sin、cos、tan、sqrt、log</div><canvas class="geom graph-canvas" data-canvas="${i}" width="760" height="190"></canvas>`;else inner=`<textarea data-i="${i}" placeholder="${b.type==="problem"?"問題文を入力":b.type==="answer"?"解答・解説を入力":"文章を入力"}">${esc(b.content)}</textarea>`;return `<div class="block"><div class="block-top"><span>${b.type.toUpperCase()}</span><button class="remove" onclick="removeBlock(${i})">削除 ×</button></div>${inner}</div>`}).join("");host.querySelectorAll("[data-i]").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>{blockData[i].content=el.value})});host.querySelectorAll("math-field").forEach(el=>{const i=+el.dataset.i;el.addEventListener("input",()=>blockData[i].content=el.value)});host.querySelectorAll("canvas[data-canvas]").forEach(c=>{const i=+c.dataset.canvas;if(blockData[i].type==="geometry")drawGeometry(c,blockData[i]);else{const graphInput=host.querySelector(`input[data-i="${i}"]`);graphInput?.addEventListener("input",()=>{blockData[i].content=graphInput.value;drawGraph(c,blockData[i].content)});drawGraph(c,blockData[i].content||"x^2")}if(blockData[i].type==="geometry")c.addEventListener("click",e=>{const r=c.getBoundingClientRect();blockData[i].points=blockData[i].points||[];blockData[i].points.push({x:(e.clientX-r.left)/r.width*760,y:(e.clientY-r.top)/r.height*190});drawGeometry(c,blockData[i])})})}
 window.removeBlock=i=>{blockData.splice(i,1);drawBlocks()};
 function drawGeometry(c,b){const x=c.getContext("2d");x.clearRect(0,0,760,190);x.strokeStyle="#dce2dc";x.lineWidth=1;for(let a=0;a<760;a+=25){x.beginPath();x.moveTo(a,0);x.lineTo(a,190);x.stroke()}for(let a=0;a<190;a+=25){x.beginPath();x.moveTo(0,a);x.lineTo(760,a);x.stroke()}(b.points||[]).forEach((p,i)=>{x.fillStyle="#315b50";x.beginPath();x.arc(p.x,p.y,5,0,Math.PI*2);x.fill();x.fillText(String.fromCharCode(65+i),p.x+8,p.y-8)});if((b.points||[]).length>1){x.strokeStyle="#315b50";x.beginPath();x.moveTo(b.points[0].x,b.points[0].y);b.points.slice(1).forEach(p=>x.lineTo(p.x,p.y));x.stroke()}}
 function drawGraph(c,expr){const x=c.getContext("2d"),w=760,h=190;x.clearRect(0,0,w,h);x.strokeStyle="#dce2dc";x.beginPath();x.moveTo(0,h/2);x.lineTo(w,h/2);x.moveTo(w/2,0);x.lineTo(w/2,h);x.stroke();const fn=expr=>{let s=expr.replace(/\^/g,"**").replace(/\bsin\b/g,"Math.sin").replace(/\bcos\b/g,"Math.cos").replace(/\btan\b/g,"Math.tan").replace(/\bsqrt\b/g,"Math.sqrt").replace(/\blog\b/g,"Math.log");return new Function("x","return "+s)};try{const f=fn(expr||"x^2");x.strokeStyle="#315b50";x.lineWidth=2;x.beginPath();for(let px=0;px<w;px++){let xx=(px-w/2)/35,y=f(xx),py=h/2-y*16;if(!Number.isFinite(py)||Math.abs(py)>1000){x.moveTo(px,py);continue}if(px===0)x.moveTo(px,py);else x.lineTo(px,py)}x.stroke()}catch(e){x.fillStyle="#a36d62";x.fillText("関数を確認してください",12,22)}}
-window.savePost=async published=>{if(!user||!db)return alert("GoogleログインとFirebase接続が必要です。");if(blockData.some(b=>b.type==="pdf"&&(b.uploading||!b.fileUrl)))return alert("PDFのアップロードが完了していないブロックがあります。アップロード完了後に保存してください。");const title=document.getElementById("postTitle").value.trim();if(!title)return alert("タイトルを入力してください。");const data={title,category:document.getElementById("postCategory").value,summary:document.getElementById("postSummary").value,blocks:blockData,authorId:user.uid,authorName:user.displayName||"Anonymous",authorPhoto:user.photoURL||"",published,updatedAt:serverTimestamp()};try{if(editingId){const ref=doc(db,"posts",editingId);const snap=await getDoc(ref);if(!snap.exists()||snap.data().authorId!==user.uid)throw new Error("編集権限がありません");await updateDoc(ref,data)}else{data.createdAt=serverTimestamp();await addDoc(collection(db,"posts"),data)}closeModal("editorModal");await loadPosts();alert(published?"投稿を公開しました。":"下書きを保存しました。")}catch(e){alert("保存に失敗しました: "+e.message)}};
+window.savePost=async published=>{if(!user||!db)return alert("GoogleログインとFirebase接続が必要です。");if(blockData.some(b=>b.type==="pdf"&&!b.fileUrl))return alert("PDFのURLを入力してください。");const title=document.getElementById("postTitle").value.trim();if(!title)return alert("タイトルを入力してください。");const data={title,category:document.getElementById("postCategory").value,summary:document.getElementById("postSummary").value,blocks:blockData,authorId:user.uid,authorName:user.displayName||"Anonymous",authorPhoto:user.photoURL||"",published,updatedAt:serverTimestamp()};try{if(editingId){const ref=doc(db,"posts",editingId);const snap=await getDoc(ref);if(!snap.exists()||snap.data().authorId!==user.uid)throw new Error("編集権限がありません");await updateDoc(ref,data)}else{data.createdAt=serverTimestamp();await addDoc(collection(db,"posts"),data)}closeModal("editorModal");await loadPosts();alert(published?"投稿を公開しました。":"下書きを保存しました。")}catch(e){alert("保存に失敗しました: "+e.message)}};
 window.openPost=async id=>{if(!db)return;const snap=await getDoc(doc(db,"posts",id));if(!snap.exists())return;activePost={id,...snap.data()};const p=activePost,own=user&&user.uid===p.authorId;let content=(p.blocks||[]).map(b=>{if(b.type==="math")return `<div class="math-view">\\(${esc(b.content)}\\)</div>`;if(b.type==="pdf")return b.fileUrl?`<section class="pdf-embed"><h3>${esc(b.fileName||"PDF資料")}</h3><iframe class="pdf-preview" src="${esc(b.fileUrl)}#toolbar=1&view=FitH" title="${esc(b.fileName||"PDF資料")}"></iframe><p class="small"><a href="${esc(b.fileUrl)}" target="_blank" rel="noopener">PDFを別タブで開く</a></p></section>`:`<p class="notice">PDFファイルが添付されていません。</p>`;if(b.type==="geometry")return geometrySvg(b);if(b.type==="graph")return `<div class="math-view"><b>f(x) = ${esc(b.content)}</b><p class="small">関数グラフ</p>${graphSvg(b.content)}</div>`;return `<section><h3>${b.type==="problem"?"Problem":b.type==="answer"?"Solution":""}</h3><div class="latex-text">${renderLatexText(b.content||"")}</div></section>`}).join("");document.getElementById("detailBody").innerHTML=`<div class="eyebrow">${esc(p.category||"MATHEMATICS")}</div><h1 style="font:500 30px var(--serif)">${esc(p.title)}</h1><div class="muted latex-text">${renderLatexText(p.summary||"")}</div><div class="small">BY ${esc(p.authorName||"")} · ${p.published?"PUBLISHED":"DRAFT"}</div><hr style="border:0;border-top:1px solid var(--line);margin:22px 0"><div class="preview-content">${content||"<p>本文はありません。</p>"}</div>${own?`<div style="display:flex;gap:8px;margin:25px 0"><button class="secondary" onclick="editPost('${id}')">編集する</button><button class="secondary" onclick="deletePost('${id}')">削除する</button></div>`:""}<hr style="border:0;border-top:1px solid var(--line);margin:25px 0"><h2 style="font:500 20px var(--serif)">Questions / 質問</h2><div id="questions">読み込み中...</div>${user?`<div class="field"><label>ASK THE AUTHOR</label><textarea id="questionText" placeholder="この投稿について質問する..."></textarea><button class="primary" onclick="askQuestion('${id}')">質問を送信</button></div>`:'<p class="small">質問するにはGoogleログインしてください。</p>'}`;openModal("detailModal");typesetMath(document.getElementById("detailBody"));loadQuestions(id)};
 function geometrySvg(b){let pts=b.points||[];let poly=pts.map(p=>`${p.x},${p.y}`).join(" ");return `<svg viewBox="0 0 760 190" class="geom"><polyline points="${poly}" fill="none" stroke="#315b50" stroke-width="2"/>${pts.map((p,i)=>`<circle cx="${p.x}" cy="${p.y}" r="5" fill="#315b50"/><text x="${p.x+9}" y="${p.y-8}" font-size="12" fill="#315b50">${String.fromCharCode(65+i)}</text>`).join("")}</svg>`}
 function renderLatexText(source=""){
@@ -125,6 +144,64 @@ async function loadQuestions(id){const host=document.getElementById("questions")
 window.askQuestion=async id=>{if(!user)return alert("ログインしてください");const text=document.getElementById("questionText").value.trim();if(!text)return;try{await addDoc(collection(db,"posts",id,"questions"),{text,authorId:user.uid,authorName:user.displayName||"User",createdAt:serverTimestamp(),answer:""});document.getElementById("questionText").value="";loadQuestions(id)}catch(e){alert("質問を送信できません: "+e.message)}};
 window.answerQuestion=async(id,qid)=>{if(!user||user.uid!==activePost.authorId)return alert("作成者のみ回答できます");const answer=document.getElementById("reply-"+qid).value.trim();if(!answer)return;try{await updateDoc(doc(db,"posts",id,"questions",qid),{answer,answeredAt:serverTimestamp()});loadQuestions(id)}catch(e){alert("回答できません: "+e.message)}};
 window.deletePost=async id=>{if(!confirm("この投稿を削除しますか？"))return;try{const r=doc(db,"posts",id),s=await getDoc(r);if(!s.exists()||s.data().authorId!==user.uid)throw new Error("権限がありません");await deleteDoc(r);closeModal("detailModal");await loadPosts()}catch(e){alert(e.message)}};
+
+async function refreshAdminStatus(){
+  admin=false;
+  if(!user||!db)return false;
+  if((user.email||"").toLowerCase()===BOOTSTRAP_ADMIN_EMAIL.toLowerCase()){admin=true;return true}
+  try{admin=(await getDoc(doc(db,"admins",user.uid))).exists()}catch(e){console.error(e)}
+  return admin;
+}
+window.openAdmin=async()=>{
+  if(!user||!(await refreshAdminStatus()))return alert("管理者のみ利用できます。");
+  openModal("adminModal");
+  const host=document.getElementById("adminBody");host.innerHTML="読み込み中...";
+  try{
+    const [us,as,ps]=await Promise.all([
+      getDocs(collection(db,"users")),getDocs(collection(db,"admins")),getDocs(collection(db,"posts"))
+    ]);
+    knownUsers.clear();
+    us.forEach(d=>knownUsers.set(d.id,{uid:d.id,...d.data()}));
+    if(user.email)knownUsers.set(user.uid,{uid:user.uid,email:user.email,displayName:user.displayName||""});
+    const adminsList=new Map();
+    as.forEach(d=>adminsList.set(d.id,{uid:d.id,...d.data()}));
+    if(user.email?.toLowerCase()===BOOTSTRAP_ADMIN_EMAIL.toLowerCase())
+      adminsList.set(user.uid,{uid:user.uid,email:user.email,displayName:user.displayName||"初期管理者"});
+    const published=ps.docs.filter(d=>d.data().published).length;
+    host.innerHTML=`
+      <div class="notice">管理者はユーザーへの管理者権限の付与・取り消し、および投稿の管理ができます。</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;margin:18px 0"><div><b>${ps.size}</b><div class="small">投稿総数</div></div><div><b>${published}</b><div class="small">公開投稿</div></div><div><b>${adminsList.size}</b><div class="small">管理者数</div></div></div>
+      <h3>管理者一覧</h3><div>${[...adminsList.values()].map(a=>`<div class="question"><b>${esc(a.displayName||"ユーザー")}</b><div class="small">${esc(a.email||a.uid)}</div>${a.uid!==user.uid&&a.email?.toLowerCase()!==BOOTSTRAP_ADMIN_EMAIL.toLowerCase()?`<button class="secondary" onclick="revokeAdmin('${a.uid}')">権限を取り消す</button>`:"<span class='small'>保護された管理者 / 自分自身</span>"}</div>`).join("")||'<p class="small">管理者はいません。</p>'}</div>
+      <h3>登録ユーザー</h3><div>${[...knownUsers.values()].map(u=>`<div class="question"><b>${esc(u.displayName||"ユーザー")}</b><div class="small">${esc(u.email||u.uid)}</div>${adminsList.has(u.uid)?'<span class="small">管理者</span>':`<button class="secondary" onclick="grantAdmin('${u.uid}')">管理者にする</button>`}</div>`).join("")||'<p class="small">ユーザーはまだ登録されていません。対象者に一度Matheditへログインしてもらってください。</p>'}</div>
+      <h3>投稿管理</h3><div>${ps.docs.map(d=>{const x=d.data();return `<div class="question"><b>${esc(x.title||"無題")}</b><div class="small">${x.published?"公開":"下書き"} · ${esc(x.authorName||"")}</div><button class="secondary" onclick="adminTogglePost('${d.id}',${!x.published})">${x.published?"非公開にする":"公開する"}</button> <button class="secondary" onclick="adminDeletePost('${d.id}')">削除</button></div>`}).join("")||'<p class="small">投稿はありません。</p>'}</div>`;
+  }catch(e){console.error(e);host.innerHTML=`<p class="notice">管理者情報を読み込めませんでした。Firestore Rulesを確認してください。<br>${esc(e.message)}</p>`}
+};
+window.grantAdmin=async uid=>{
+  if(!(await refreshAdminStatus()))return alert("管理者権限がありません。");
+  const target=knownUsers.get(uid);if(!target)return alert("ユーザー情報が見つかりません。");
+  if(!confirm(`${target.email||target.displayName||uid} に管理者権限を付与しますか？`))return;
+  try{await setDoc(doc(db,"admins",uid),{uid,email:target.email||"",displayName:target.displayName||"",grantedBy:user.uid,grantedAt:serverTimestamp()});await openAdmin();alert("管理者権限を付与しました。対象者は再読み込みしてください。")}
+  catch(e){alert("権限を付与できませんでした: "+e.message)}
+};
+window.revokeAdmin=async uid=>{
+  if(!(await refreshAdminStatus()))return alert("管理者権限がありません。");
+  if(uid===user.uid)return alert("自分自身の権限はここから取り消せません。");
+  if(!confirm("このユーザーの管理者権限を取り消しますか？"))return;
+  try{await deleteDoc(doc(db,"admins",uid));await openAdmin();alert("管理者権限を取り消しました。")}
+  catch(e){alert("権限を取り消せませんでした: "+e.message)}
+};
+window.adminTogglePost=async(id,published)=>{
+  if(!(await refreshAdminStatus()))return alert("管理者権限がありません。");
+  try{await updateDoc(doc(db,"posts",id),{published,updatedAt:serverTimestamp()});await openAdmin();await loadPosts()}
+  catch(e){alert("更新できませんでした: "+e.message)}
+};
+window.adminDeletePost=async id=>{
+  if(!(await refreshAdminStatus()))return alert("管理者権限がありません。");
+  if(!confirm("この投稿を削除しますか？"))return;
+  try{await deleteDoc(doc(db,"posts",id));await openAdmin();await loadPosts()}
+  catch(e){alert("削除できませんでした: "+e.message)}
+};
+
 window.openModal=id=>document.getElementById(id).classList.add("show");window.closeModal=id=>document.getElementById(id).classList.remove("show");
 function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 </script></body></html>
