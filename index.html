@@ -49,6 +49,131 @@ window.MathJax = {
 @media(max-width:520px){.profile-stats{gap:6px}.profile-stat{padding:11px 8px}.profile-stat strong{font-size:19px}.profile-actions{grid-template-columns:1fr}}
 .hidden{display:none!important}
 @media(max-width:760px){.top{padding:0 16px}.nav{gap:10px}.nav button{font-size:11px}.wrap{padding:0 16px}.hero{grid-template-columns:1fr;padding:48px 0 35px}.hero-note{display:none}.posts{grid-template-columns:1fr}.toolbar{flex-wrap:wrap}.search{max-width:none;flex-basis:100%}.panel{padding:20px}.brand{font-size:18px}}
+
+
+/* ===== Mathedit responsive article overflow fix ===== */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Grid / flex children must be allowed to shrink below their min-content width. */
+.wrap, main, .posts, .post-card, .modal, .panel,
+#detailModal, #detailModal .panel, #detailBody,
+.preview-content, .preview-content > *, .latex-text,
+.question, .question > *, .math-view, .pdf-embed {
+  min-width: 0;
+  max-width: 100%;
+}
+.posts { width: 100%; }
+.post-card { overflow: hidden; }
+.post-card h3, .excerpt, .preview-content,
+.preview-content p, .preview-content h1,
+.preview-content h2, .preview-content h3,
+.latex-text, #detailBody h1 {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Media should scale to the article column. */
+.preview-content img,
+.preview-content video,
+.preview-content iframe,
+.preview-content svg,
+.preview-content canvas,
+#detailBody img,
+#detailBody video,
+#detailBody iframe,
+#detailBody svg,
+#detailBody canvas {
+  max-width: 100% !important;
+}
+.preview-content img, #detailBody img,
+.preview-content video, #detailBody video {
+  height: auto;
+}
+.pdf-embed { width: 100%; overflow: hidden; }
+.pdf-preview { display: block; width: 100%; max-width: 100%; }
+
+/* Long code and tables scroll inside their own region, never the whole page. */
+.preview-content pre, #detailBody pre,
+.preview-content .code-block {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  overscroll-behavior-inline: contain;
+}
+.preview-content code, #detailBody code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.preview-content table, #detailBody table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  overscroll-behavior-inline: contain;
+}
+
+/* Inline equations fit the text column; long display equations scroll locally. */
+.preview-content mjx-container,
+.latex-text mjx-container,
+#detailBody mjx-container {
+  max-width: 100% !important;
+}
+.preview-content mjx-container:not([display="true"]),
+.latex-text mjx-container:not([display="true"]),
+#detailBody mjx-container:not([display="true"]) {
+  display: inline-block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: middle;
+}
+.preview-content mjx-container[display="true"],
+.latex-text mjx-container[display="true"],
+#detailBody mjx-container[display="true"] {
+  display: block;
+  width: 100%;
+  max-width: 100% !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 10px 2px 14px;
+  margin: 12px 0;
+  overscroll-behavior-inline: contain;
+}
+.math-view { width: 100%; overflow-x: auto; overflow-y: hidden; }
+
+/* Modal must fit narrow screens as well. */
+#detailModal { overflow-x: hidden; }
+#detailModal .panel {
+  width: 100%;
+  max-width: 850px;
+  margin-left: auto;
+  margin-right: auto;
+  overflow-x: hidden;
+}
+
+@media (max-width: 760px) {
+  .wrap { width: 100%; }
+  .posts { grid-template-columns: minmax(0, 1fr); }
+  .post-card { width: 100%; }
+  #detailModal { padding: 12px 8px; }
+  #detailModal .panel { padding: 17px 14px; }
+  #detailBody h1 { font-size: clamp(21px, 6vw, 28px) !important; }
+  .preview-content { font-size: 14px; line-height: 1.9; }
+  .pdf-preview { height: 65vh; min-height: 340px; }
+}
+@media (max-width: 380px) {
+  .wrap { padding-left: 12px; padding-right: 12px; }
+  #detailModal .panel { padding: 14px 11px; }
+  .preview-content { font-size: 13px; }
+}
+
 </style></head>
 <body>
 <header class="top"><div class="brand">Mathedit<small>MATHEMATICS, SHARED.</small></div><nav class="nav"><button onclick="showHome()">Explore</button><button onclick="myPosts()">My works</button><button id="adminNav" class="plain hidden" onclick="openAdmin()">管理者</button><button class="primary" id="authBtn" onclick="signIn()">Googleでログイン</button></nav></header>
