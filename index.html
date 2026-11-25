@@ -173,7 +173,27 @@ html, body {
   #detailModal .panel { padding: 14px 11px; }
   .preview-content { font-size: 13px; }
 }
+/* 記事一覧を常に1列にする */
+.posts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) !important;
+  width: 100%;
+  max-width: 100%;
+  gap: 16px;
+}
 
+.posts > .post-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.posts > .post-card h3,
+.posts > .post-card .excerpt {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 </style></head>
 <body>
 <header class="top"><div class="brand">Mathedit<small>MATHEMATICS, SHARED.</small></div><nav class="nav"><button onclick="showHome()">Explore</button><button onclick="myPosts()">My works</button><button id="adminNav" class="plain hidden" onclick="openAdmin()">管理者</button><button class="primary" id="authBtn" onclick="signIn()">Googleでログイン</button></nav></header>
