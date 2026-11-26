@@ -267,11 +267,19 @@ html, body {
     measurementId: "G-72LG8CLSD1"
   };
 
-let db=null,auth=null,user=null,admin=false,posts=[],editingId=null,activePost=null,blockData=[];
-const BOOTSTRAP_ADMIN_EMAIL = "kawaiamane2013@gmail.com";
+let db = null;
+let auth = null;
 let user = null;
 let admin = false;
 let superAdmin = false;
+
+let posts = [];
+let editingId = null;
+let activePost = null;
+let blockData = [];
+
+const BOOTSTRAP_ADMIN_EMAIL = "kawaiamane2013@gmail.com";
+
 const knownUsers=new Map();
 const configured=!Object.values(firebaseConfig).some(v=>String(v).includes("YOUR_"));
 if(configured){
