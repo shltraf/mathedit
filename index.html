@@ -473,7 +473,24 @@ window.openAdmin=async()=>{
         </div>
         <p id="adminGrantMessage" class="small" role="status" aria-live="polite"></p>
       </section>
-      <h3>管理者一覧</h3><div>${[...adminsList.values()].map(a=>`<div class="question"><b>${esc(a.displayName||"ユーザー")}</b><div class="small">${esc(a.email||a.uid)}</div>${a.uid!==user.uid&&a.email?.toLowerCase()!==BOOTSTRAP_ADMIN_EMAIL.toLowerCase()?`<button class="secondary" onclick="revokeAdmin('${a.uid}')">権限を取り消す</button>`:"<span class='small'>保護された管理者 / 自分自身</span>"}</div>`).join("")||'<p class="small">管理者はいません。</p>'}</div>
+     <h3>管理者一覧</h3>
+<div>
+${[...adminsList.values()].map(a => `
+  <div class="question">
+    <b>${esc(a.displayName || "ユーザー")}</b>
+    <div class="small">${esc(a.email || a.uid)}</div>
+    ${
+      superAdmin &&
+      a.uid !== user.uid &&
+      a.email?.toLowerCase() !== BOOTSTRAP_ADMIN_EMAIL.toLowerCase()
+        ? `<button class="secondary" onclick="revokeAdmin('${a.uid}')">
+             管理者権限を剥奪
+           </button>`
+        : "<span class='small'>剥奪不可</span>"
+    }
+  </div>
+`).join("") || '<p class="small">管理者はいません。</p>'}
+</div>
       <h3>登録ユーザー</h3><div>${[...knownUsers.values()].map(u=>`<div class="question"><b>${esc(u.displayName||"ユーザー")}</b><div class="small">${esc(u.email||u.uid)}</div>${adminsList.has(u.uid)?'<span class="small">管理者</span>':`<button class="secondary" onclick="grantAdmin('${u.uid}')">管理者にする</button>`}</div>`).join("")||'<p class="small">ユーザーはまだ登録されていません。対象者に一度Matheditへログインしてもらってください。</p>'}</div>
       <h3>投稿管理</h3><div>${ps.docs.map(d=>{const x=d.data();return `<div class="question"><b>${esc(x.title||"無題")}</b><div class="small">${x.published?"公開":"下書き"} · ${esc(x.authorName||"")}</div><button class="secondary" onclick="adminTogglePost('${d.id}',${!x.published})">${x.published?"非公開にする":"公開する"}</button> <button class="secondary" onclick="adminDeletePost('${d.id}')">削除</button></div>`}).join("")||'<p class="small">投稿はありません。</p>'}</div>`;
   }catch(e){console.error(e);host.innerHTML=`<p class="notice">管理者情報を読み込めませんでした。Firestore Rulesを確認してください。<br>${esc(e.message)}</p>`}
@@ -505,12 +522,37 @@ window.grantAdmin=async uid=>{
     alert("管理者権限を付与しました。対象者はMatheditを再読み込みしてください。");
   }catch(e){alert("権限を付与できませんでした: "+e.message)}
 };
-window.revokeAdmin=async uid=>{
-  if(!(await refreshAdminStatus()))return alert("管理者権限がありません。");
-  if(uid===user.uid)return alert("自分自身の権限はここから取り消せません。");
-  if(!confirm("このユーザーの管理者権限を取り消しますか？"))return;
-  try{await deleteDoc(doc(db,"admins",uid));await openAdmin();alert("管理者権限を取り消しました。")}
-  catch(e){alert("権限を取り消せませんでした: "+e.message)}
+window.revokeAdmin = async uid => {
+  if (!superAdmin) {
+    alert("管理者権限の剥奪は上位管理者のみ実行できます。");
+    return;
+  }
+
+  if (uid === user.uid) {
+    alert("自分自身の権限は取り消せません。");
+    return;
+  }
+
+  const target = knownUsers.get(uid);
+  const targetEmail = target?.email || "";
+
+  if (targetEmail.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
+    alert("上位管理者の権限は剥奪できません。");
+    return;
+  }
+
+  if (!confirm(`${targetEmail || uid} の管理者権限を剥奪しますか？`)) {
+    return;
+  }
+
+  try {
+    await deleteDoc(doc(db, "admins", uid));
+    alert("管理者権限を剥奪しました。");
+    await openAdmin();
+  } catch (e) {
+    console.error(e);
+    alert("剥奪に失敗しました: " + e.message);
+  }
 };
 window.adminTogglePost=async(id,published)=>{
   if(!(await refreshAdminStatus()))return alert("管理者権限がありません。");
