@@ -266,7 +266,6 @@ html, body {
     appId: "1:105344635185:web:56bdac15ab41a6edc2a010",
     measurementId: "G-72LG8CLSD1"
   };
-
 let db = null;
 let auth = null;
 let user = null;
@@ -280,7 +279,7 @@ let blockData = [];
 
 const BOOTSTRAP_ADMIN_EMAIL = "kawaiamane2013@gmail.com";
 
-const knownUsers=new Map();
+const knownUsers = new Map();
 const configured=!Object.values(firebaseConfig).some(v=>String(v).includes("YOUR_"));
 if(configured){
   try {
@@ -427,31 +426,35 @@ window.askQuestion=async id=>{if(!user)return alert("ログインしてくださ
 window.answerQuestion=async(id,qid)=>{if(!user||user.uid!==activePost.authorId)return alert("作成者のみ回答できます");const answer=document.getElementById("reply-"+qid).value.trim();if(!answer)return;try{await updateDoc(doc(db,"posts",id,"questions",qid),{answer,answeredAt:serverTimestamp()});loadQuestions(id)}catch(e){alert("回答できません: "+e.message)}};
 window.deletePost=async id=>{if(!confirm("この投稿を削除しますか？"))return;try{const r=doc(db,"posts",id),s=await getDoc(r);if(!s.exists()||s.data().authorId!==user.uid)throw new Error("権限がありません");await deleteDoc(r);closeModal("detailModal");await loadPosts()}catch(e){alert(e.message)}};
 
-async function revokeAdmin(uid, email) {
-  if (!superAdmin) {
-    alert("管理者権限の剥奪は上位管理者のみ実行できます。");
-    return;
+async function refreshAdminStatus() {
+  if (!user) {
+    admin = false;
+    superAdmin = false;
+    return false;
   }
 
-  if (email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
-    alert("上位管理者の権限は剥奪できません。");
-    return;
+  const email = (user.email || "").trim().toLowerCase();
+
+  // 上位管理者
+  if (email === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
+    admin = true;
+    superAdmin = true;
+    updateAuth();
+    return true;
   }
 
-  if (!confirm(`${email} の管理者権限を剥奪しますか？`)) {
-    return;
-  }
+  superAdmin = false;
 
   try {
-    await deleteDoc(doc(db, "admins", uid));
-
-    alert(`${email} の管理者権限を剥奪しました。`);
-
-    await loadAdminUsers();
+    const snap = await getDoc(doc(db, "admins", user.uid));
+    admin = snap.exists();
   } catch (error) {
-    console.error(error);
-    alert("管理者権限の剥奪に失敗しました。");
+    console.error("Admin status check failed:", error);
+    admin = false;
   }
+
+  updateAuth();
+  return admin;
 }
 window.openAdmin=async()=>{
   if(!user||!(await refreshAdminStatus()))return alert("管理者のみ利用できます。");
