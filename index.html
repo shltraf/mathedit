@@ -268,7 +268,10 @@ html, body {
   };
 
 let db=null,auth=null,user=null,admin=false,posts=[],editingId=null,activePost=null,blockData=[];
-const BOOTSTRAP_ADMIN_EMAIL="kawaiamane2013@gmail.com";
+const BOOTSTRAP_ADMIN_EMAIL = "kawaiamane2013@gmail.com";
+let user = null;
+let admin = false;
+let superAdmin = false;
 const knownUsers=new Map();
 const configured=!Object.values(firebaseConfig).some(v=>String(v).includes("YOUR_"));
 if(configured){
@@ -276,36 +279,49 @@ if(configured){
     const app=initializeApp(firebaseConfig);
     auth=getAuth(app);
     db=getFirestore(app);
-    onAuthStateChanged(auth,async u=>{
-      user=u; admin=false;
-      if(u){
-        // 管理者判定とユーザー登録を別々に実行する。
-        // admins/{uid} の読み取りに失敗しても users/{uid} の登録を止めない。
-        if((u.email||"").trim().toLowerCase()===BOOTSTRAP_ADMIN_EMAIL.toLowerCase()){
-          admin=true;
-        }else{
-          try{
-            const a=await getDoc(doc(db,"admins",u.uid));
-            admin=a.exists();
-          }catch(e){
-            console.error("Admin status check failed:",e);
-          }
-        }
-        try{
-          await setDoc(doc(db,"users",u.uid),{
-            uid:u.uid,
-            email:(u.email||"").trim(),
-            displayName:u.displayName||"",
-            photoURL:u.photoURL||"",
-            updatedAt:serverTimestamp()
-          },{merge:true});
-          console.info("Mathedit user profile synchronized:",u.uid);
-        }catch(e){
-          console.error("User profile synchronization failed:",e);
-        }
+    
+      onAuthStateChanged(auth, async u => {
+  user = u;
+  admin = false;
+  superAdmin = false;
+
+  if (u) {
+    const email = (u.email || "").trim().toLowerCase();
+
+    // 上位管理者の判定
+    if (email === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
+      admin = true;
+      superAdmin = true;
+    } else {
+      try {
+        const adminDoc = await getDoc(
+          doc(db, "admins", u.uid)
+        );
+
+        admin = adminDoc.exists();
+      } catch (e) {
+        console.error("Admin check failed:", e);
       }
-      updateAuth();loadPosts();
-    });
+    }
+
+    // ユーザー情報の登録
+    try {
+      await setDoc(doc(db, "users", u.uid), {
+        uid: u.uid,
+        email: u.email || "",
+        displayName: u.displayName || "",
+        photoURL: u.photoURL || "",
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (e) {
+      console.error("User synchronization failed:", e);
+    }
+  }
+
+  updateAuth();
+  loadPosts();
+});
+  
   } catch(e) {
     console.error("Firebase initialization failed:",e);
     alert("Firebaseの初期化に失敗しました。Consoleを確認してください: "+e.message);
@@ -403,12 +419,31 @@ window.askQuestion=async id=>{if(!user)return alert("ログインしてくださ
 window.answerQuestion=async(id,qid)=>{if(!user||user.uid!==activePost.authorId)return alert("作成者のみ回答できます");const answer=document.getElementById("reply-"+qid).value.trim();if(!answer)return;try{await updateDoc(doc(db,"posts",id,"questions",qid),{answer,answeredAt:serverTimestamp()});loadQuestions(id)}catch(e){alert("回答できません: "+e.message)}};
 window.deletePost=async id=>{if(!confirm("この投稿を削除しますか？"))return;try{const r=doc(db,"posts",id),s=await getDoc(r);if(!s.exists()||s.data().authorId!==user.uid)throw new Error("権限がありません");await deleteDoc(r);closeModal("detailModal");await loadPosts()}catch(e){alert(e.message)}};
 
-async function refreshAdminStatus(){
-  admin=false;
-  if(!user||!db)return false;
-  if((user.email||"").toLowerCase()===BOOTSTRAP_ADMIN_EMAIL.toLowerCase()){admin=true;return true}
-  try{admin=(await getDoc(doc(db,"admins",user.uid))).exists()}catch(e){console.error(e)}
-  return admin;
+async function revokeAdmin(uid, email) {
+  if (!superAdmin) {
+    alert("管理者権限の剥奪は上位管理者のみ実行できます。");
+    return;
+  }
+
+  if (email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
+    alert("上位管理者の権限は剥奪できません。");
+    return;
+  }
+
+  if (!confirm(`${email} の管理者権限を剥奪しますか？`)) {
+    return;
+  }
+
+  try {
+    await deleteDoc(doc(db, "admins", uid));
+
+    alert(`${email} の管理者権限を剥奪しました。`);
+
+    await loadAdminUsers();
+  } catch (error) {
+    console.error(error);
+    alert("管理者権限の剥奪に失敗しました。");
+  }
 }
 window.openAdmin=async()=>{
   if(!user||!(await refreshAdminStatus()))return alert("管理者のみ利用できます。");
